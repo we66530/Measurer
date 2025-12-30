@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Image Distance Calibrator</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #222;
+    color: #eee;
+    text-align: center;
+  }
+  #controls {
+    margin: 10px;
+  }
+  canvas {
+    border: 1px solid #ccc;
+    cursor: crosshair;
+    max-width: 95%;
+  }
+  input {
+    padding: 5px;
+    font-size: 16px;
+    width: 100px;
+  }
+</style>
+</head>
+
+<body>
+
+<h2>Image Distance Calibration Tool</h2>
+
+<div id="controls">
+  <input type="file" id="imageLoader" accept="image/*">
+  &nbsp;&nbsp;
+  Known length:
+  <input type="number" id="realLength" value="1" step="0.1"> cm
+</div>
+
+<p>
+  Line length: <span id="pixelLength">0</span> px<br>
+  Scale: <span id="scale">0</span> px / cm
+</p>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const imageLoader = document.getElementById("imageLoader");
+const realLengthInput = document.getElementById("realLength");
+
+const pixelLengthSpan = document.getElementById("pixelLength");
+const scaleSpan = document.getElementById("scale");
+
+let img = new Image();
+let drawing = false;
+let start = {x: 0, y: 0};
+let end = {x: 0, y: 0};
+
+imageLoader.addEventListener("change", e => {
+  const reader = new FileReader();
+  reader.onload = event => {
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      redraw();
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(e.target.files[0]);
+});
+
+canvas.addEventListener("mousedown", e => {
+  drawing = true;
+  start = getMousePos(e);
+  end = start;
+});
+
+canvas.addEventListener("mousemove", e => {
+  if (!drawing) return;
+  end = getMousePos(e);
+  redraw();
+  updateMeasurements();
+});
+
+canvas.addEventListener("mouseup", () => {
+  drawing = false;
+  updateMeasurements();
+});
+
+function getMousePos(evt) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (evt.clientX - rect.left) * (canvas.width / rect.width),
+    y: (evt.clientY - rect.top) * (canvas.height / rect.height)
+  };
+}
+
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0);
+
+  if (start && end) {
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.strokeStyle = "red";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function updateMeasurements() {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const pixelLength = Math.sqrt(dx * dx + dy * dy);
+
+  pixelLengthSpan.textContent = pixelLength.toFixed(2);
+
+  const realLength = parseFloat(realLengthInput.value);
+  if (realLength > 0) {
+    const scale = pixelLength / realLength;
+    scaleSpan.textContent = scale.toFixed(2);
+  }
+}
+</script>
+
+</body>
+</html>
