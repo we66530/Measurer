@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Image Distance Calibrator</title>
+<title>Image Distance Calibration Tool</title>
+
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -10,18 +11,26 @@
     color: #eee;
     text-align: center;
   }
+
   #controls {
     margin: 10px;
   }
+
   canvas {
     border: 1px solid #ccc;
     cursor: crosshair;
     max-width: 95%;
+    margin-top: 10px;
   }
-  input {
-    padding: 5px;
+
+  input, button {
+    padding: 6px;
     font-size: 16px;
-    width: 100px;
+    margin: 4px;
+  }
+
+  button {
+    cursor: pointer;
   }
 </style>
 </head>
@@ -35,16 +44,27 @@
   &nbsp;&nbsp;
   Known length:
   <input type="number" id="realLength" value="1" step="0.1"> cm
+  &nbsp;&nbsp;
+  <button onclick="saveResult()">Save to Google Sheet</button>
 </div>
 
 <p>
-  Line length: <span id="pixelLength">0</span> px<br>
-  Scale: <span id="scale">0</span> px / cm
+  <b>Filename:</b> <span id="filenameDisplay">-</span><br>
+  <b>Line length:</b> <span id="pixelLength">0</span> px<br>
+  <b>Scale:</b> <span id="scale">0</span> px / cm
 </p>
 
 <canvas id="canvas"></canvas>
 
 <script>
+/* =========================
+   Config
+========================= */
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyvhoXUjuGxMInklnAihmNTbk3YGF2cIcLGTGRYUXC7nIbYbPGE1nDb869H2fKyga0K/exec";
+
+/* =========================
+   Canvas & UI
+========================= */
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
@@ -53,25 +73,42 @@ const realLengthInput = document.getElementById("realLength");
 
 const pixelLengthSpan = document.getElementById("pixelLength");
 const scaleSpan = document.getElementById("scale");
+const filenameDisplay = document.getElementById("filenameDisplay");
 
 let img = new Image();
 let drawing = false;
-let start = {x: 0, y: 0};
-let end = {x: 0, y: 0};
+let start = null;
+let end = null;
+let currentFilename = "";
 
+/* =========================
+   Image Load
+========================= */
 imageLoader.addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  currentFilename = file.name.replace(/\.[^/.]+$/, "");
+  filenameDisplay.textContent = currentFilename;
+
   const reader = new FileReader();
   reader.onload = event => {
     img.onload = () => {
       canvas.width = img.width;
       canvas.height = img.height;
+      start = null;
+      end = null;
       redraw();
+      resetResult();
     };
     img.src = event.target.result;
   };
-  reader.readAsDataURL(e.target.files[0]);
+  reader.readAsDataURL(file);
 });
 
+/* =========================
+   Mouse Events
+========================= */
 canvas.addEventListener("mousedown", e => {
   drawing = true;
   start = getMousePos(e);
@@ -90,6 +127,9 @@ canvas.addEventListener("mouseup", () => {
   updateMeasurements();
 });
 
+/* =========================
+   Functions
+========================= */
 function getMousePos(evt) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -113,6 +153,8 @@ function redraw() {
 }
 
 function updateMeasurements() {
+  if (!start || !end) return;
+
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const pixelLength = Math.sqrt(dx * dx + dy * dy);
@@ -124,6 +166,45 @@ function updateMeasurements() {
     const scale = pixelLength / realLength;
     scaleSpan.textContent = scale.toFixed(2);
   }
+}
+
+function resetResult() {
+  pixelLengthSpan.textContent = "0";
+  scaleSpan.textContent = "0";
+}
+
+/* =========================
+   Save to Google Sheet
+========================= */
+function saveResult() {
+  const scaleValue = scaleSpan.textContent;
+
+  if (!currentFilename) {
+    alert("No image loaded.");
+    return;
+  }
+
+  if (!scaleValue || scaleValue === "0") {
+    alert("Please draw a line first.");
+    return;
+  }
+
+  const payload = {
+    filename: currentFilename,
+    scale: `${scaleValue} px / cm`
+  };
+
+  fetch(SCRIPT_URL, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json" }
+  })
+  .then(res => res.json())
+  .then(() => alert("Saved to Google Sheet ✅"))
+  .catch(err => {
+    console.error(err);
+    alert("Failed to save ❌");
+  });
 }
 </script>
 
